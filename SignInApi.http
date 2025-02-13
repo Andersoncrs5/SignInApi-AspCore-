@@ -1,0 +1,6 @@
+@SignInApi_HostAddress = http://localhost:5032
+
+GET {{SignInApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

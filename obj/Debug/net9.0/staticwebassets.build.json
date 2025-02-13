@@ -1,0 +1,12 @@
+{
+  "Version": 1,
+  "Hash": "Mmfm3UyhkCVNYVy5TP51P3sbMAmCURIt+eDo67iFcLI=",
+  "Source": "SignInApi",
+  "BasePath": "_content/SignInApi",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": [],
+  "Endpoints": []
+}
