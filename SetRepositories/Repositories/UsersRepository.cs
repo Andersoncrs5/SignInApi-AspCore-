@@ -30,11 +30,12 @@ public class UsersRepository : IUsersRepository
         }
     }
 
-    public async Task<UsersEntity?> Delete(ulong id)
+    public async Task<UsersEntity?> Delete(string email)
     {
         try
         {
-            var user = await _context.users.FirstOrDefaultAsync(u => u.Id == id);
+            UsersEntity? user = await _context.users.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Email == email);
 
             if (user is null)
                 return null; 
@@ -48,11 +49,14 @@ public class UsersRepository : IUsersRepository
         }
     }
 
-    public async Task<UsersEntity?> Get(ulong id)
+    public async Task<UsersEntity?> Get(string email)
     {
         try
         {
-            return await _context.users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id);
+            if (string.IsNullOrEmpty(email))
+                throw new ArgumentNullException("Email is required");
+
+            return await _context.users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email);
         }
         catch (Exception e)
         {
@@ -67,13 +71,13 @@ public class UsersRepository : IUsersRepository
             if (user is null)
                 throw new ArgumentNullException(nameof(user));
 
-            UsersEntity? userFound = await _context.users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == user.Id);
+            UsersEntity? userFound = await _context.users
+                .AsNoTracking().FirstOrDefaultAsync(u => u.Email == user.Email);
 
             if (userFound is null)
                 return null;
 
             _context.Entry(user).State = EntityState.Modified;
-            //_context.Entry(userFound).CurrentValues.SetValues(user);
             await this._context.SaveChangesAsync(); 
             return userFound; 
         }
@@ -82,4 +86,31 @@ public class UsersRepository : IUsersRepository
             throw new Exception($"Erro ao atualizar usuário: {e.Message}", e);
         }
     }
+
+    public async Task<bool> LoginAsync(string email, string password)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+                throw new ArgumentException("Email and password are required");
+
+            UsersEntity? userFound = await _context.users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Email == email);
+
+            if (userFound is null)
+                return false;
+
+            if (userFound.Password != password)
+                return false;
+
+            return true;
+        }
+        catch (Exception e)
+        {
+            throw new Exception($"Erro ao realizar login: {e.Message}", e);
+        }
+    }
+
+
 }

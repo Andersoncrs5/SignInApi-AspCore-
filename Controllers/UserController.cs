@@ -1,7 +1,10 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SignInApi.Entities;
 using SignInApi.SetUnitOfWork;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 namespace SignInApi.Controllers
 {
@@ -16,55 +19,49 @@ namespace SignInApi.Controllers
             _uof = uof;
         }
 
-        [HttpGet("get/{id}")]
-        public async Task<ActionResult<UsersEntity>> Get(ulong id)
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+        [HttpGet("me")]
+        public async Task<ActionResult<UsersEntity>> Me()
         {
             try
             {
-                if (id == 0)
-                    return BadRequest("Invalid user ID");
+                string? emailClaim = User.FindFirst(ClaimTypes.Email)?.Value.Trim();
 
-                UsersEntity? user = await _uof.UsersRepository.Get(id);
+                
+
+                if (string.IsNullOrWhiteSpace(emailClaim))
+                    return Unauthorized("Token does not contain a valid email.");
+
+                Console.WriteLine($"Email: {emailClaim}");
+
+                UsersEntity? user = await _uof.UsersRepository.Get(emailClaim);
+
+                Console.WriteLine($"User: {user}");
 
                 if (user is null)
-                    return NotFound("User not found");
+                    return NotFound("User not found.");
 
                 return Ok(user);
             }
             catch (Exception e)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, $"Error: {e}");
+                return StatusCode(StatusCodes.Status500InternalServerError, $"An error occurred: {e.Message}");
             }
         }
 
-        [HttpPost("create")]
-        public async Task<ActionResult> Post([FromBody] UsersEntity user)
+
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+        [HttpDelete("delete")]
+        public async Task<ActionResult> Delete()
         {
             try
             {
-                if (!ModelState.IsValid)
-                    return BadRequest(ModelState);
+                string? email = User.FindFirst(ClaimTypes.Sid)?.Value;
 
-                await _uof.UsersRepository.Create(user);
-                await _uof.Commit();
+                if (string.IsNullOrWhiteSpace(email))
+                    return BadRequest("Invalid user ID in token");
 
-                return CreatedAtAction(nameof(Get), new { id = user.Id }, user);
-            }
-            catch (Exception e)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, $"Error: {e}");
-            }
-        }
-
-        [HttpDelete("delete/{id}")]
-        public async Task<ActionResult> Delete(ulong id)
-        {
-            try
-            {
-                if (id == 0)
-                    return BadRequest("Invalid user ID");
-
-                var user = await _uof.UsersRepository.Delete(id);
+                UsersEntity? user = await _uof.UsersRepository.Delete(email);
 
                 if (user is null)
                     return NotFound("User not found");
@@ -78,13 +75,21 @@ namespace SignInApi.Controllers
             }
         }
 
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPut("update")]
-        public async Task<ActionResult> Put([FromBody] UsersEntity user)
+        public async Task<ActionResult> Update([FromBody] UsersEntity user)
         {
             try
             {
                 if (!ModelState.IsValid)
                     return BadRequest(ModelState);
+
+                string? email = User.FindFirst(ClaimTypes.Email)?.Value;
+
+                if (string.IsNullOrWhiteSpace(email))
+                    return BadRequest("Invalid user ID in token");
+
+                user.Email = email;
 
                 var userUpdated = await _uof.UsersRepository.Update(user);
 
@@ -99,5 +104,6 @@ namespace SignInApi.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, $"Error: {e.Message}");
             }
         }
+
     }
 }

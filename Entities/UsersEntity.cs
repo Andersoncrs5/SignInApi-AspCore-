@@ -7,7 +7,7 @@ namespace SignInApi.Entities;
 public class UsersEntity
 {
     [Key]
-    public ulong Id { get; set; } 
+    public long Id { get; set; } 
 
     [Required(ErrorMessage = "Field is required")]
     [StringLength(100, ErrorMessage = "Max size of 100")]
