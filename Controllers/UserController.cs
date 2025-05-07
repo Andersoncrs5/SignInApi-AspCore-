@@ -2,9 +2,11 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SignInApi.Entities;
-using SignInApi.SetUnitOfWork;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using SignInApiEntities;
+using Microsoft.AspNetCore.Identity;
+using SignInApiAspCore.Controllers.DTOs;
 
 namespace SignInApi.Controllers
 {
@@ -12,36 +14,36 @@ namespace SignInApi.Controllers
     [ApiController]
     public class UserController : ControllerBase
     {
-        private readonly IUnitOfWork _uof;
+        private readonly UserManager<ApplicationUser> _userManager;
 
-        public UserController(IUnitOfWork uof)
+        public UserController(UserManager<ApplicationUser> userManager)
         {
-            _uof = uof;
+            _userManager = userManager;
         }
 
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpGet("me")]
-        public async Task<ActionResult<UsersEntity>> Me()
+        public async Task<ActionResult> Me()
         {
             try
             {
-                string? emailClaim = User.FindFirst(ClaimTypes.Email)?.Value.Trim();
-
-                
+                string? emailClaim = User.FindFirst(ClaimTypes.Email)?.Value?.Trim();
 
                 if (string.IsNullOrWhiteSpace(emailClaim))
                     return Unauthorized("Token does not contain a valid email.");
 
-                Console.WriteLine($"Email: {emailClaim}");
-
-                UsersEntity? user = await _uof.UsersRepository.Get(emailClaim);
-
-                Console.WriteLine($"User: {user}");
+                ApplicationUser? user = await _userManager.FindByEmailAsync(emailClaim);
 
                 if (user is null)
                     return NotFound("User not found.");
 
-                return Ok(user);
+                return Ok(new
+                {
+                    user.Id,
+                    user.UserName,
+                    user.Email,
+                    user.PhoneNumber
+                });
             }
             catch (Exception e)
             {
@@ -49,25 +51,28 @@ namespace SignInApi.Controllers
             }
         }
 
-
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpDelete("delete")]
         public async Task<ActionResult> Delete()
         {
             try
             {
-                string? email = User.FindFirst(ClaimTypes.Sid)?.Value;
+                string? email = User.FindFirst(ClaimTypes.Email)?.Value;
 
                 if (string.IsNullOrWhiteSpace(email))
-                    return BadRequest("Invalid user ID in token");
+                    return BadRequest("Invalid email in token");
 
-                UsersEntity? user = await _uof.UsersRepository.Delete(email);
+                ApplicationUser? user = await _userManager.FindByEmailAsync(email);
 
                 if (user is null)
                     return NotFound("User not found");
 
-                await _uof.Commit();
-                return NoContent();
+                var result = await _userManager.DeleteAsync(user);
+
+                if (!result.Succeeded)
+                    return StatusCode(StatusCodes.Status500InternalServerError, "Delete failed");
+
+                return Ok("User deleted successfully.");
             }
             catch (Exception e)
             {
@@ -77,7 +82,7 @@ namespace SignInApi.Controllers
 
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPut("update")]
-        public async Task<ActionResult> Update([FromBody] UsersEntity user)
+        public async Task<ActionResult> Update([FromBody] UpdateUserDto userDto)
         {
             try
             {
@@ -87,23 +92,35 @@ namespace SignInApi.Controllers
                 string? email = User.FindFirst(ClaimTypes.Email)?.Value;
 
                 if (string.IsNullOrWhiteSpace(email))
-                    return BadRequest("Invalid user ID in token");
+                    return BadRequest("Invalid email in token");
 
-                user.Email = email;
+                ApplicationUser? user = await _userManager.FindByEmailAsync(email);
 
-                var userUpdated = await _uof.UsersRepository.Update(user);
+                if (user is null)
+                    return NotFound("User not found.");
 
-                if (userUpdated is null)
-                    return NotFound("User not found");
+                if (!string.IsNullOrWhiteSpace(userDto.Password))
+                {
+                    var passwordHasher = new PasswordHasher<ApplicationUser>();
+                    user.PasswordHash = passwordHasher.HashPassword(user, userDto.Password);
+                }
 
-                await _uof.Commit();
-                return Ok($"User updated! {userUpdated}");
+                var result = await _userManager.UpdateAsync(user);
+
+                if (!result.Succeeded)
+                {
+                    Console.WriteLine(result);
+                    return StatusCode(StatusCodes.Status500InternalServerError, "Update failed");
+                }
+
+                return Ok("User updated successfully.");
             }
             catch (Exception e)
             {
                 return StatusCode(StatusCodes.Status500InternalServerError, $"Error: {e.Message}");
             }
         }
+
 
     }
 }

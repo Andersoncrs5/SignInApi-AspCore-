@@ -22,6 +22,7 @@ public class UsersRepository : IUsersRepository
                 throw new ArgumentNullException(nameof(user));
 
             await _context.users.AddAsync(user);
+            await _context.SaveChangesAsync();
             return user;
         }
         catch (Exception e)
@@ -53,10 +54,13 @@ public class UsersRepository : IUsersRepository
     {
         try
         {
+            email = email.Trim().ToLower();
+
             if (string.IsNullOrEmpty(email))
                 throw new ArgumentNullException("Email is required");
 
-            return await _context.users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email);
+            return await _context.users.AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == email);
         }
         catch (Exception e)
         {

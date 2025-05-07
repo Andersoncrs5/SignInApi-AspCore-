@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SignInApi")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a42d0f5ccb4efb70bfc03549bb7280aa2292e738")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e4025abe2cf0a982c2cab0621756f572d3f54bfe")]
 [assembly: System.Reflection.AssemblyProductAttribute("SignInApi")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SignInApi")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

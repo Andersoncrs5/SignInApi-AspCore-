@@ -43,10 +43,14 @@ namespace SignInApi.Controllers
             {
                 var userRoles = await _userManager.GetRolesAsync(user);
 
+                if (string.IsNullOrEmpty(user.Email) || string.IsNullOrWhiteSpace(user.Email))
+                    return BadRequest("Email is null");
+
                 var authClaims = new List<Claim>
                 {
                     new Claim(ClaimTypes.Name, user.UserName!),
-                    new Claim(ClaimTypes.Email, user.Email.Trim()!),
+                    new Claim(ClaimTypes.Sid, user.Id!),
+                    new Claim(ClaimTypes.Email, user.Email.Trim()),
                     new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
                 };
 
@@ -80,7 +84,7 @@ namespace SignInApi.Controllers
         {
             try 
             {
-                string email = model.Email.Trim();
+                string email = model.Email.Trim().ToLower();
 
                 if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(model.Password))
                     return BadRequest("Email and Password must be provided.");
@@ -93,14 +97,14 @@ namespace SignInApi.Controllers
                         new Response { Status = "Error", Message = "User already exists." });
                 }
 
-                var user = new ApplicationUser
+                ApplicationUser? user = new ApplicationUser
                 {
                     Email = email,
                     SecurityStamp = Guid.NewGuid().ToString(),
                     UserName = model.Name
                 };
 
-                var result = await _userManager.CreateAsync(user, model.Password);
+                IdentityResult? result = await _userManager.CreateAsync(user, model.Password);
 
                 if (!result.Succeeded)
                 {
@@ -119,7 +123,6 @@ namespace SignInApi.Controllers
             {
                 throw new Exception($"Error: \n{e}");
             }
-            
         }
 
         [HttpPost("refresh-token")]
