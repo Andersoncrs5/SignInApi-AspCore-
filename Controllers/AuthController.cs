@@ -3,8 +3,10 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using SignInApi.Entities;
 using SignInApi.Services.IServices;
+using SignInApi.utils.responses;
 using SignInApiEntities;
 
 namespace SignInApi.Controllers
@@ -33,18 +35,43 @@ namespace SignInApi.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto model)
         {
-            string email = model.Email.Trim();
-            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(model.Password))
-                return BadRequest("Email and Password must be provided.");
+            if (!ModelState.IsValid)
+            {
+                ResponseBody<ValidationErrors> errorResponse = CreateErrorResponse(ModelState);
+                return BadRequest(errorResponse);
+            }
 
-            var user = await _userManager.FindByEmailAsync(email);
+            string email = model.Email.Trim();
+
+            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(model.Password))
+            {
+                return BadRequest(new ResponseBody<string>
+                {
+                    Body = null,
+                    Message = "Email and Password must be provided.",
+                    Success = false,
+                    Timestamp = DateTimeOffset.Now,
+                    StatusCode = 400,
+                });
+            }
+
+            ApplicationUser? user = await _userManager.FindByEmailAsync(email);
 
             if (user != null && await _userManager.CheckPasswordAsync(user, model.Password))
             {
-                var userRoles = await _userManager.GetRolesAsync(user);
+                IList<string> userRoles = await _userManager.GetRolesAsync(user);
 
                 if (string.IsNullOrEmpty(user.Email) || string.IsNullOrWhiteSpace(user.Email))
-                    return BadRequest("Email is null");
+                {
+                    return BadRequest(new ResponseBody<string>
+                    {
+                        Body = null,
+                        Message = "Email is null",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = 400,
+                    });
+                }
 
                 var authClaims = new List<Claim>
                 {
@@ -54,13 +81,13 @@ namespace SignInApi.Controllers
                     new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
                 };
 
-                foreach (var userRole in userRoles)
+                foreach (string userRole in userRoles)
                 {
                     authClaims.Add(new Claim(ClaimTypes.Role, userRole));
                 }
 
-                var token = _tokenService.GenerateAccessToken(authClaims, _configuration);
-                var refreshToken = _tokenService.GenerateRefreshToken();
+                JwtSecurityToken token = _tokenService.GenerateAccessToken(authClaims, _configuration);
+                string refreshToken = _tokenService.GenerateRefreshToken();
 
                 _ = int.TryParse(_configuration["jwt:RefreshTokenValidityInMinutes"], out int refreshTokenValidity);
 
@@ -68,15 +95,21 @@ namespace SignInApi.Controllers
                 user.RefreshTokenExpiryTime = DateTime.UtcNow.AddMinutes(refreshTokenValidity);
                 await _userManager.UpdateAsync(user);
 
-                return Ok(new
+                return Ok(new Tokens
                 {
                     Token = new JwtSecurityTokenHandler().WriteToken(token),
                     RefreshToken = refreshToken,
-                    Expiration = token.ValidTo
+                    ExpirationToken = token.ValidTo
                 });
             }
 
-            return Unauthorized("Invalid email or password.");
+            return Unauthorized(new ResponseBody<string>{
+                Body = null,
+                Message = "Invalid email or password.",
+                Success = false,
+                Timestamp = DateTimeOffset.Now,
+                StatusCode = 401,
+            });
         }
 
         [HttpPost("register")]
@@ -84,17 +117,39 @@ namespace SignInApi.Controllers
         {
             try 
             {
+                if (!ModelState.IsValid)
+                {
+                    ResponseBody<ValidationErrors> errorResponse = CreateErrorResponse(ModelState);
+                    return BadRequest(errorResponse);
+                }
+
                 string email = model.Email.Trim().ToLower();
 
                 if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(model.Password))
-                    return BadRequest("Email and Password must be provided.");
+                {
+                    return BadRequest(new ResponseBody<string>
+                    {
+                        Body = null,
+                        Message = "Email and Password must be provided.",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = 400,
+                    });
+                }
 
-                var userExists = await _userManager.FindByEmailAsync(email);
+                ApplicationUser? userExists = await _userManager.FindByEmailAsync(email);
 
                 if (userExists != null)
                 {
-                    return StatusCode(StatusCodes.Status400BadRequest,
-                        new Response { Status = "Error", Message = "User already exists." });
+                    return StatusCode(StatusCodes.Status409Conflict, new ResponseBody<string>
+                    {
+                        Body = null,
+                        Message = "User already exists.",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = StatusCodes.Status409Conflict,
+                    });
+
                 }
 
                 ApplicationUser? user = new ApplicationUser
@@ -108,20 +163,37 @@ namespace SignInApi.Controllers
 
                 if (!result.Succeeded)
                 {
-                    var errors = result.Errors.Select(e => e.Description);
-                    return StatusCode(StatusCodes.Status400BadRequest, new
+                    IEnumerable<string> errors = result.Errors.Select(e => e.Description);
+                    return StatusCode(StatusCodes.Status400BadRequest, new ResponseBody<IEnumerable<string>>
                     {
-                        Status = "Error",
+                        StatusCode = 400,
                         Message = "User creation failed.",
-                        Errors = errors
+                        Body = errors,
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now
                     });
                 }
 
-                return Ok(new Response { Status = "Success", Message = "User created successfully." });
+                return StatusCode(StatusCodes.Status201Created, new ResponseBody<string>
+                    {
+                        Body = null,
+                        Message = "User created successfully.",
+                        Success = true,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = 201,
+                    }
+                );
             }
             catch (Exception e)
             {
-                throw new Exception($"Error: \n{e}");
+                return StatusCode(StatusCodes.Status500InternalServerError, new ResponseBody<string>
+                    {
+                        Body = e.Message,
+                        Message = "Error the create user! Please try again later",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = StatusCodes.Status500InternalServerError,
+                    });
             }
         }
 
@@ -129,33 +201,66 @@ namespace SignInApi.Controllers
         public async Task<IActionResult> RefreshToken([FromBody] TokenModel tokenModel)
         {
             if (tokenModel is null || string.IsNullOrWhiteSpace(tokenModel.AcessToken) || string.IsNullOrWhiteSpace(tokenModel.RefreshToken))
-                return BadRequest("Invalid client request");
-
-            var principal = _tokenService.GetPrincipalFromExpiredToken(tokenModel.AcessToken, _configuration);
+            {    
+                return BadRequest(new ResponseBody<string>{
+                    Body = null,
+                    Message = "Invalid client request",
+                    Success = false,
+                    Timestamp = DateTimeOffset.Now,
+                    StatusCode = 400,
+                });
+            }
+            
+            ClaimsPrincipal principal = _tokenService.GetPrincipalFromExpiredToken(tokenModel.AcessToken, _configuration);
 
             if (principal == null)
-                return BadRequest("Invalid access token or refresh token");
+            {
+                return BadRequest(new ResponseBody<string>{
+                    Body = null,
+                    Message = "Invalid access token or refresh token",
+                    Success = false,
+                    Timestamp = DateTimeOffset.Now,
+                    StatusCode = 400,
+                });
+            }
 
             var username = principal.Identity?.Name;
 
             if (string.IsNullOrWhiteSpace(username))
-                return BadRequest("Invalid token data");
+            {
+                return BadRequest(new ResponseBody<string>{
+                    Body = null,
+                    Message = "Invalid token data",
+                    Success = false,
+                    Timestamp = DateTimeOffset.Now,
+                    StatusCode = 400,
+                });
+            }
 
             var user = await _userManager.FindByNameAsync(username);
 
             if (user == null || user.RefreshToken != tokenModel.RefreshToken || user.RefreshTokenExpiryTime <= DateTime.Now)
-                return BadRequest("Invalid access token or refresh token");
+            {
+                return BadRequest(new ResponseBody<string>{
+                    Body = null,
+                    Message = "Invalid access token or refresh token",
+                    Success = false,
+                    Timestamp = DateTimeOffset.Now,
+                    StatusCode = 400,
+                });
+            }
 
-            var newAccessToken = _tokenService.GenerateAccessToken(principal.Claims.ToList(), _configuration);
-            var newRefreshToken = _tokenService.GenerateRefreshToken();
+            JwtSecurityToken newAccessToken = _tokenService.GenerateAccessToken(principal.Claims.ToList(), _configuration);
+            string newRefreshToken = _tokenService.GenerateRefreshToken();
 
             user.RefreshToken = newRefreshToken;
             await _userManager.UpdateAsync(user);
 
-            return Ok(new
+            return Ok(new Tokens
             {
-                AccessToken = new JwtSecurityTokenHandler().WriteToken(newAccessToken),
-                RefreshToken = newRefreshToken
+                Token = new JwtSecurityTokenHandler().WriteToken(newAccessToken),
+                RefreshToken = newRefreshToken,
+                ExpirationToken = newAccessToken.ValidTo
             });
         }
 
@@ -166,15 +271,55 @@ namespace SignInApi.Controllers
         {
             var user = await this._userManager.FindByEmailAsync(email);
 
-            if (user == null) return BadRequest("Invalid email");
+            if (user == null)
+            {
+                return BadRequest(new ResponseBody<string>{
+                    Body = null,
+                    Message = "Invalid email",
+                    Success = false,
+                    Timestamp = DateTimeOffset.Now,
+                    StatusCode = 400,
+                });
+            }
 
             user.RefreshToken = null;
 
             await _userManager.UpdateAsync(user);
 
-            return NoContent();
-
+            return StatusCode(StatusCodes.Status200OK, new ResponseBody<string>{
+                Body = null,
+                Message = "Bye bye",
+                Success = true,
+                Timestamp = DateTimeOffset.Now,
+                StatusCode = 200,
+            });
         }
+
+        private ResponseBody<ValidationErrors> CreateErrorResponse(ModelStateDictionary modelState)
+        {
+            ValidationErrors errorDict = new ValidationErrors();
+
+            foreach (string key in modelState.Keys)
+            {
+                ModelStateEntry? state = modelState[key];
+                if (state.Errors.Any())
+                {
+                    var errorMessages = state.Errors.Select(e => e.ErrorMessage).ToList();
+                    errorDict.Errors.Add(key, errorMessages);
+                }
+            }
+
+            return new ResponseBody<ValidationErrors>
+            {
+                Message = "Validation failed. Check the response body for errors.",
+                Success = false,
+                StatusCode = StatusCodes.Status400BadRequest, 
+                Timestamp = DateTimeOffset.UtcNow,
+                Body = errorDict, 
+                Url = $"{this.Request.Scheme}://{this.Request.Host}{this.Request.Path}"
+            };
+        }
+
 
     }
 }

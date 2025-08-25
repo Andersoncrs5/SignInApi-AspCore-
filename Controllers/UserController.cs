@@ -7,6 +7,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using SignInApiEntities;
 using Microsoft.AspNetCore.Identity;
 using SignInApiAspCore.Controllers.DTOs;
+using SignInApi.utils.responses;
+using SignInApi.DTOs;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace SignInApi.Controllers
 {
@@ -22,7 +25,7 @@ namespace SignInApi.Controllers
         }
 
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-        [HttpGet("me")]
+        [HttpGet("me", Name = "GetUser")]
         public async Task<ActionResult> Me()
         {
             try
@@ -30,29 +33,52 @@ namespace SignInApi.Controllers
                 string? emailClaim = User.FindFirst(ClaimTypes.Email)?.Value?.Trim();
 
                 if (string.IsNullOrWhiteSpace(emailClaim))
-                    return Unauthorized("Token does not contain a valid email.");
+                    return Unauthorized(new ResponseBody<string>{
+                        Body = null,
+                        Message = "Token does not contain a valid email.",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = 401,
+                    });
 
                 ApplicationUser? user = await _userManager.FindByEmailAsync(emailClaim);
 
                 if (user is null)
-                    return NotFound("User not found.");
+                    return NotFound(new ResponseBody<string>
+                    {
+                        Body = null,
+                        Message = "User not found.",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = 404,
+                    });
 
-                return Ok(new
-                {
-                    user.Id,
-                    user.UserName,
-                    user.Email,
-                    user.PhoneNumber
-                });
+                return Ok(new ResponseBody<UserDTO>
+                    {
+                        Body = new UserDTO{ Id = user.Id, UserName = user.UserName,Email = user.Email,PhoneNumber = user.PhoneNumber},
+                        Message = "User found.",
+                        Success = true,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = 200,
+                    }
+                );
+
             }
             catch (Exception e)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, $"An error occurred: {e.Message}");
+                return StatusCode(StatusCodes.Status500InternalServerError, new ResponseBody<string>
+                    {
+                        Body = e.Message,
+                        Message = "Error the get user! Please try again later",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = StatusCodes.Status500InternalServerError,
+                    });
             }
         }
 
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-        [HttpDelete("delete")]
+        [HttpDelete("delete", Name = "DeleteUser")]
         public async Task<ActionResult> Delete()
         {
             try
@@ -60,44 +86,97 @@ namespace SignInApi.Controllers
                 string? email = User.FindFirst(ClaimTypes.Email)?.Value;
 
                 if (string.IsNullOrWhiteSpace(email))
-                    return BadRequest("Invalid email in token");
+                    return Unauthorized(new ResponseBody<string>{
+                        Body = null,
+                        Message = "Token does not contain a valid email.",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = 401,
+                    });
 
                 ApplicationUser? user = await _userManager.FindByEmailAsync(email);
 
                 if (user is null)
-                    return NotFound("User not found");
+                    return NotFound(new ResponseBody<string>
+                    {
+                        Body = null,
+                        Message = "User not found",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = 404,
+                    });
 
-                var result = await _userManager.DeleteAsync(user);
+                IdentityResult result = await _userManager.DeleteAsync(user);
 
                 if (!result.Succeeded)
-                    return StatusCode(StatusCodes.Status500InternalServerError, "Delete failed");
+                {
+                    return StatusCode(StatusCodes.Status500InternalServerError,new ResponseBody<IEnumerable<IdentityError>>
+                    {
+                        Body = result.Errors,
+                        Message = "Delete failed",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = StatusCodes.Status500InternalServerError,
+                    });
+                }
 
-                return Ok("User deleted successfully.");
+                return Ok(new ResponseBody<string>
+                    {
+                        Body = null,
+                        Message = "User deleted successfully.",
+                        Success = true,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = 200,
+                    }
+                );
             }
             catch (Exception e)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, $"Error: {e.Message}");
+                return StatusCode(StatusCodes.Status500InternalServerError, new ResponseBody<string>
+                    {
+                        Body = e.Message,
+                        Message = "Error the delete user! Please try again later",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = StatusCodes.Status500InternalServerError,
+                    });
             }
         }
 
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-        [HttpPut("update")]
+        [HttpPut("update", Name = "UpdateUser")]
         public async Task<ActionResult> Update([FromBody] UpdateUserDto userDto)
         {
             try
             {
                 if (!ModelState.IsValid)
-                    return BadRequest(ModelState);
+                {
+                    ResponseBody<ValidationErrors> errorResponse = CreateErrorResponse(ModelState);
+                    return BadRequest(errorResponse);
+                }
 
                 string? email = User.FindFirst(ClaimTypes.Email)?.Value;
 
                 if (string.IsNullOrWhiteSpace(email))
-                    return BadRequest("Invalid email in token");
+                    return Unauthorized(new ResponseBody<string>{
+                        Body = null,
+                        Message = "Token does not contain a valid email.",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = 401,
+                    });
 
                 ApplicationUser? user = await _userManager.FindByEmailAsync(email);
 
                 if (user is null)
-                    return NotFound("User not found.");
+                    return NotFound(new ResponseBody<string>
+                    {
+                        Body = null,
+                        Message = "User not found",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = 404,
+                    });
 
                 if (!string.IsNullOrWhiteSpace(userDto.Password))
                 {
@@ -109,18 +188,63 @@ namespace SignInApi.Controllers
 
                 if (!result.Succeeded)
                 {
-                    Console.WriteLine(result);
-                    return StatusCode(StatusCodes.Status500InternalServerError, "Update failed");
+                    return StatusCode(StatusCodes.Status500InternalServerError,new ResponseBody<IEnumerable<IdentityError>>
+                    {
+                        Body = result.Errors,
+                        Message = "Error the update user",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = StatusCodes.Status500InternalServerError,
+                    });
                 }
 
-                return Ok("User updated successfully.");
+                return Ok(new ResponseBody<string>
+                    {
+                        Body = null,
+                        Message = "User updated successfully.",
+                        Success = true,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = 200,
+                    }
+                );
             }
             catch (Exception e)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, $"Error: {e.Message}");
+                return StatusCode(StatusCodes.Status500InternalServerError, new ResponseBody<string>
+                    {
+                        Body = e.Message,
+                        Message = "Error the update user! Please try again later",
+                        Success = false,
+                        Timestamp = DateTimeOffset.Now,
+                        StatusCode = StatusCodes.Status500InternalServerError,
+                    });
             }
         }
 
+        private ResponseBody<ValidationErrors> CreateErrorResponse(ModelStateDictionary modelState)
+        {
+            ValidationErrors errorDict = new ValidationErrors();
+
+            foreach (string key in modelState.Keys)
+            {
+                ModelStateEntry? state = modelState[key];
+                if (state.Errors.Any())
+                {
+                    var errorMessages = state.Errors.Select(e => e.ErrorMessage).ToList();
+                    errorDict.Errors.Add(key, errorMessages);
+                }
+            }
+
+            return new ResponseBody<ValidationErrors>
+            {
+                Message = "Validation failed. Check the response body for errors.",
+                Success = false,
+                StatusCode = StatusCodes.Status400BadRequest, 
+                Timestamp = DateTimeOffset.UtcNow,
+                Body = errorDict, 
+                Url = $"{this.Request.Scheme}://{this.Request.Host}{this.Request.Path}"
+            };
+        }
 
     }
 }
