@@ -10,6 +10,7 @@ using SignInApiAspCore.Controllers.DTOs;
 using SignInApi.utils.responses;
 using SignInApi.DTOs;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace SignInApi.Controllers
 {
@@ -26,6 +27,7 @@ namespace SignInApi.Controllers
 
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpGet("me", Name = "GetUser")]
+        [EnableRateLimiting("readLimitPolicy")]
         public async Task<ActionResult> Me()
         {
             try
@@ -79,6 +81,7 @@ namespace SignInApi.Controllers
 
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpDelete("delete", Name = "DeleteUser")]
+        [EnableRateLimiting("deleteLimitPolicy")]
         public async Task<ActionResult> Delete()
         {
             try
@@ -145,6 +148,7 @@ namespace SignInApi.Controllers
 
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPut("update", Name = "UpdateUser")]
+        [EnableRateLimiting("updateLimitPolicy")]
         public async Task<ActionResult> Update([FromBody] UpdateUserDto userDto)
         {
             try

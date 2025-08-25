@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.RateLimiting;
 using SignInApi.Entities;
 using SignInApi.Services.IServices;
 using SignInApi.utils.responses;
@@ -33,6 +34,7 @@ namespace SignInApi.Controllers
         }
 
         [HttpPost("login")]
+        [EnableRateLimiting("authSystemPolicy")]
         public async Task<IActionResult> Login([FromBody] LoginDto model)
         {
             if (!ModelState.IsValid)
@@ -113,6 +115,7 @@ namespace SignInApi.Controllers
         }
 
         [HttpPost("register")]
+        [EnableRateLimiting("authSystemPolicy")]
         public async Task<IActionResult> Register([FromBody] RegisterUserDto model)
         {
             try 
@@ -198,6 +201,7 @@ namespace SignInApi.Controllers
         }
 
         [HttpPost("refresh-token")]
+        [EnableRateLimiting("authSystemPolicy")]
         public async Task<IActionResult> RefreshToken([FromBody] TokenModel tokenModel)
         {
             if (tokenModel is null || string.IsNullOrWhiteSpace(tokenModel.AcessToken) || string.IsNullOrWhiteSpace(tokenModel.RefreshToken))
@@ -267,6 +271,7 @@ namespace SignInApi.Controllers
         [Authorize]
         [HttpPost]
         [Route("revoke/{email}")]
+        [EnableRateLimiting("authSystemPolicy")]
         public async Task<IActionResult> Revoke(string email)
         {
             var user = await this._userManager.FindByEmailAsync(email);
