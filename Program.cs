@@ -11,6 +11,9 @@ using SignInApiEntities;
 using SignInApi.Services.IServices;
 using SignInApi.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using System.Net;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -95,6 +98,47 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 builder.Services.AddControllers();
+
+builder.Services.AddRateLimiter(rate =>
+{
+    rate.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.StatusCode = (int)HttpStatusCode.TooManyRequests;
+        await context.HttpContext.Response.WriteAsync("Too many requests. Please try again later.");
+    };
+
+    rate.AddFixedWindowLimiter("authSystemPolicy", options => 
+    {
+        options.PermitLimit = 15;
+        options.Window = TimeSpan.FromSeconds(10);
+        options.QueueLimit = 0;
+    });
+
+    rate.AddFixedWindowLimiter("deleteLimitPolicy", options => 
+    {
+        options.PermitLimit = 15;
+        options.Window = TimeSpan.FromSeconds(5);
+        options.QueueLimit = 0;
+    });
+
+    rate.AddFixedWindowLimiter("updateLimitPolicy", options => 
+    {
+        options.PermitLimit = 15;
+        options.Window = TimeSpan.FromSeconds(10);
+        options.QueueLimit = 0;
+    });
+
+    rate.AddSlidingWindowLimiter("readLimitPolicy", options => 
+    {
+        options.PermitLimit = 30;
+        options.Window = TimeSpan.FromSeconds(10);
+        options.SegmentsPerWindow = 2;
+        options.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        options.QueueLimit = 0;
+    });
+
+
+});
 
 // CORS
 builder.Services.AddCors(options =>
