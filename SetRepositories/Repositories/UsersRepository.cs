@@ -8,6 +8,7 @@ namespace SignInApi.SetRepositories.Repositories;
 public class UsersRepository : IUsersRepository
 {
     private readonly AppDbContext _context;
+    
 
     public UsersRepository(AppDbContext context)
     {
