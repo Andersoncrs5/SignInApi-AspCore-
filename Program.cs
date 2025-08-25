@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using System.Net;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Mvc.Versioning;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -138,6 +139,14 @@ builder.Services.AddRateLimiter(rate =>
     });
 
 
+});
+
+builder.Services.AddApiVersioning(options => 
+{
+    options.ReportApiVersions = true;
+    options.DefaultApiVersion = new Microsoft.AspNetCore.Mvc.ApiVersion(1,0);
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ApiVersionReader = new UrlSegmentApiVersionReader();
 });
 
 // CORS
